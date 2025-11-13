@@ -141,11 +141,6 @@ async function run() {
             .send({ success: false, message: "Event not found" });
         }
 
-        // Optional: Ensure only creator can update
-        // if (event.createdBy !== updateData.createdBy) {
-        //   return res.status(403).send({ success: false, message: "Not allowed" });
-        // }
-
         const result = await eventsCollection.updateOne(
           { _id: new ObjectId(id) },
           { $set: updateData }
@@ -181,11 +176,6 @@ async function run() {
             .status(404)
             .send({ success: false, message: "Event not found" });
         }
-
-        // Optional: Ensure only creator can delete
-        // if (event.createdBy !== req.body.createdBy) {
-        //   return res.status(403).send({ success: false, message: "Not allowed" });
-        // }
 
         await eventsCollection.deleteOne({ _id: new ObjectId(id) });
         res.send({ success: true, message: "Event deleted successfully" });
@@ -232,6 +222,79 @@ async function run() {
         res
           .status(500)
           .send({ success: false, message: "Failed to join event." });
+      }
+    });
+
+    // ====== GET: Fetch all joined events for a user ======
+    app.get("/events/joined/:email", async (req, res) => {
+      try {
+        const email = req.params.email;
+        const joinedEvents = await joinedCollection
+          .find({ userEmail: email })
+          .toArray();
+
+        // Fetch actual event details using event IDs
+        const eventIds = joinedEvents.map((j) => new ObjectId(j.eventId));
+        const events = await eventsCollection
+          .find({ _id: { $in: eventIds } })
+          .toArray();
+
+        res.send({ success: true, events });
+      } catch (err) {
+        console.error("❌ Error fetching joined events:", err);
+        res
+          .status(500)
+          .send({ success: false, message: "Failed to fetch joined events." });
+      }
+    });
+
+    // ====== DELETE: Leave an event ======
+    app.delete("/events/leave", async (req, res) => {
+      try {
+        const { eventId, userEmail } = req.body;
+        if (!eventId || !userEmail)
+          return res
+            .status(400)
+            .send({ success: false, message: "Missing data." });
+
+        const result = await joinedCollection.deleteOne({ eventId, userEmail });
+
+        if (result.deletedCount === 0)
+          return res
+            .status(404)
+            .send({ success: false, message: "Join record not found." });
+
+        res.send({ success: true, message: "Left event successfully!" });
+      } catch (err) {
+        console.error("❌ Error leaving event:", err);
+        res
+          .status(500)
+          .send({ success: false, message: "Failed to leave event." });
+      }
+    });
+
+    // ====== GET: Check if user already joined an event ======
+    app.get("/events/join/check", async (req, res) => {
+      try {
+        const { eventId, userEmail } = req.query;
+
+        if (!eventId || !userEmail) {
+          return res
+            .status(400)
+            .send({ success: false, message: "Missing query parameters." });
+        }
+
+        const existing = await joinedCollection.findOne({ eventId, userEmail });
+
+        res.send({
+          success: true,
+          joined: !!existing, // true if already joined, false otherwise
+        });
+      } catch (err) {
+        console.error("❌ Error checking join status:", err);
+        res
+          .status(500)
+          .send({ success: false, message: "Failed to check join status." });
       }
     });
 
