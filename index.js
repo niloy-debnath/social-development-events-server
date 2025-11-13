@@ -44,14 +44,16 @@ async function run() {
           !newEvent.title ||
           !newEvent.description ||
           !newEvent.eventType ||
-          !newEvent.thumbnail ||
           !newEvent.location ||
           !newEvent.date ||
           !newEvent.createdBy
         ) {
           return res
             .status(400)
-            .send({ success: false, message: "All fields are required." });
+            .send({
+              success: false,
+              message: "All fields are required (thumbnail optional).",
+            });
         }
 
         newEvent.createdAt = new Date();
@@ -69,15 +71,20 @@ async function run() {
       }
     });
 
-    // ===== GET: All Events =====
+    // ===== GET: All Events (with optional search by title) =====
     app.get("/events", async (req, res) => {
       try {
-        const { createdBy } = req.query;
-        const query = createdBy ? { createdBy } : {};
+        const { search, createdBy } = req.query;
+        const query = {};
+
+        if (createdBy) query.createdBy = createdBy;
+        if (search) query.title = { $regex: search, $options: "i" }; // case-insensitive search
+
         const events = await eventsCollection
           .find(query)
           .sort({ createdAt: -1 })
           .toArray();
+
         res.send(events);
       } catch (err) {
         console.error("❌ Error fetching events:", err);
@@ -196,22 +203,31 @@ async function run() {
       }
     });
 
-    // ===== NEW: Check if user already joined =====
-    app.get("/events/join/check", async (req, res) => {
+    // ===== POST: Leave Event =====
+    app.post("/events/leave", async (req, res) => {
       try {
-        const { eventId, userEmail } = req.query;
+        const { eventId, userEmail } = req.body;
         if (!eventId || !userEmail)
           return res
             .status(400)
             .send({ success: false, message: "Missing data." });
 
-        const existing = await joinedCollection.findOne({ eventId, userEmail });
-        res.send({ joined: !!existing });
+        const result = await joinedCollection.deleteOne({
+          eventId: eventId.toString(),
+          userEmail,
+        });
+
+        if (result.deletedCount === 0)
+          return res
+            .status(404)
+            .send({ success: false, message: "Join record not found." });
+
+        res.send({ success: true, message: "Left event successfully!" });
       } catch (err) {
-        console.error("❌ Error checking join status:", err);
+        console.error("❌ Error leaving event:", err);
         res
           .status(500)
-          .send({ success: false, message: "Failed to check join status." });
+          .send({ success: false, message: "Failed to leave event." });
       }
     });
 
@@ -240,42 +256,6 @@ async function run() {
         res
           .status(500)
           .send({ success: false, message: "Failed to fetch joined events." });
-      }
-    });
-
-    // ===== DELETE: Leave Event =====
-    app.post("/events/leave", async (req, res) => {
-      try {
-        console.log("🧩 Delete request body:", req.body);
-
-        const { eventId, userEmail } = req.body;
-
-        if (!eventId || !userEmail) {
-          console.log("⚠️ Missing data:", { eventId, userEmail });
-          return res
-            .status(400)
-            .send({ success: false, message: "Missing data." });
-        }
-
-        // ❗ Do NOT check ObjectId validity — eventId is stored as a string
-        const result = await joinedCollection.deleteOne({
-          eventId: eventId.toString(),
-          userEmail,
-        });
-
-        if (result.deletedCount === 0) {
-          console.log("⚠️ Join record not found:", { eventId, userEmail });
-          return res
-            .status(404)
-            .send({ success: false, message: "Join record not found." });
-        }
-
-        res.send({ success: true, message: "Left event successfully!" });
-      } catch (err) {
-        console.error("❌ Error leaving event:", err);
-        res
-          .status(500)
-          .send({ success: false, message: "Failed to leave event." });
       }
     });
 
