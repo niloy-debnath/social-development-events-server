@@ -1,6 +1,7 @@
 const express = require("express");
 const cors = require("cors");
 const { MongoClient, ServerApiVersion, ObjectId } = require("mongodb");
+require("dotenv").config();
 
 const app = express();
 const port = 5000;
@@ -10,8 +11,7 @@ app.use(cors());
 app.use(express.json());
 
 // ===== MongoDB Connection =====
-const uri =
-  "mongodb+srv://EventTracker:huTjrRb3RV31PVn3@cluster0.dqh1dvb.mongodb.net/?appName=Cluster0";
+const uri = `mongodb+srv://${process.env.DB_USERNAME}:${process.env.DB_PASSWORD}@cluster0.dqh1dvb.mongodb.net/?appName=Cluster0`;
 
 const client = new MongoClient(uri, {
   serverApi: {
@@ -48,12 +48,10 @@ async function run() {
           !newEvent.date ||
           !newEvent.createdBy
         ) {
-          return res
-            .status(400)
-            .send({
-              success: false,
-              message: "All fields are required (thumbnail optional).",
-            });
+          return res.status(400).send({
+            success: false,
+            message: "All fields are required (thumbnail optional).",
+          });
         }
 
         newEvent.createdAt = new Date();
